@@ -34,13 +34,13 @@ struct Ekf {
   // states: x, y, z, vx, vy, vz, roll, pitch, yaw
 
   Ekf(double _dt) : dt(_dt) {
-    A.setIdentity(9, 9);
+    A.setIdentity(9, 9); //9x9单位矩阵
     Sigma.setZero(9, 9);
     B.setZero(9, 6);
     C.setZero(6, 9);
-    A(0, 3) = dt;
-    A(1, 4) = dt;
-    A(2, 5) = dt;
+    A(0, 3) = dt; //（0，3）元设为dt
+    A(1, 4) = dt; //（1，3）元设为dt
+    A(2, 5) = dt; //（2，5）元设为dt
     double t2 = dt * dt / 2;
     B(0, 0) = t2;
     B(1, 1) = t2;
@@ -72,9 +72,9 @@ struct Ekf {
     Rt(3, 3) = 0.01;
     Rt(4, 4) = 0.01;
     Rt(5, 5) = 0.01;
-    x.setZero(9);
+    x.setZero(9); //当前时刻三维位置、速度、欧拉角，共9维数据
   }
-  inline void predict() {
+  inline void predict() { //EKF预测步骤：下一时刻（dt）目标里程计信息
     x = A * x;
     Sigma = A * Sigma * A.transpose() + B * Qt * B.transpose();
     return;
@@ -85,7 +85,7 @@ struct Ekf {
     x.tail(3) = z_rpy;
     Sigma.setZero();
   }
-  inline bool update(const Eigen::Vector3d& z, const Eigen::Vector3d& z_rqp) {
+  inline bool update(const Eigen::Vector3d& z, const Eigen::Vector3d& z_rqp) { //EKF更新步骤：利用观测矩阵和观测噪声协方差矩阵来校正（当前时刻）预测值，并得到最终的状态估计值和协方差矩阵
     K = Sigma * C.transpose() * (C * Sigma * C.transpose() + Rt).inverse();
     Eigen::VectorXd zz(6);
     zz.head(3) = z;

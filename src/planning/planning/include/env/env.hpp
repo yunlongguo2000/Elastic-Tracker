@@ -651,6 +651,8 @@ class Env {
     double theta0 = atan2(dp.y(), dp.x());
     double d_theta = mapPtr_->resolution / desired_dist_ / 2;
     double t_l, t_r;
+    //以从目标到无人机的射线为中心，扇形向两边扩张直至遇到障碍物
+    //或许可以通过修改M_PI，来降低扇形的角度上限。比如原来上限是2*PI，可以改成2*PI/3
     for (t_l = theta0 - d_theta; t_l > theta0 - M_PI; t_l -= d_theta) {
       Eigen::Vector3d p = center;
       p.x() += desired_dist_ * cos(t_l);
@@ -669,10 +671,12 @@ class Env {
         break;
       }
     }
+    //重新计算扇形对称轴所在位置
     double theta_v = (t_l + t_r) / 2;
     visible_p = center;
     visible_p.x() += desired_dist_ * cos(theta_v);
     visible_p.y() += desired_dist_ * sin(theta_v);
+    //计算扇形的半角
     theta = (t_r - t_l) / 2;
     double theta_c = theta < theta_clearance_ ? theta : theta_clearance_;
     if (theta0 - t_l < theta_c) {

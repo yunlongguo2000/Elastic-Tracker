@@ -1,4 +1,7 @@
 <launch>
+  <arg name="odom_"/>
+  <arg name="depth_"/>
+
   <node pkg="nodelet" type="nodelet" name="manager" args="manager" output="screen">
     <param name="num_worker_threads" value="16"/>
   </node>
@@ -9,8 +12,8 @@
     <!-- camera parameters -->
     <rosparam command="load" file="$(find mapping)/config/camera.yaml"/>
     <!-- remap topics -->
-    <remap from="~odom" to="odom"/>
-    <remap from="~depth" to="depth"/>
+    <remap from="~odom" to="$(arg odom_)"/>
+    <remap from="~depth" to="$(arg depth_)"/>
     <remap from="~gridmap" to="gridmap"/>
     <remap from="~gridmap_inflate" to="gridmap_inflate"/>
     <param name="down_sample_factor" value="2"/>

@@ -18,6 +18,8 @@
 #include <visualization/visualization.hpp>
 #include <wr_msg/wr_msg.hpp>
 
+#include <std_msgs/Bool.h>
+
 namespace planning {
 
 Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " << ", ";");
@@ -148,11 +150,14 @@ class Nodelet : public nodelet::Nodelet {
   // NOTE main callback
   void plan_timer_callback(const ros::TimerEvent& event) {
     heartbeat_pub_.publish(std_msgs::Empty());
-    if (!odom_received_ || !map_received_) {
+    if (!odom_received_ || !map_received_) { //同时收到里程计与地图消息
       return;
     }
     // obtain state of odom
-    while (odom_lock_.test_and_set())
+    while (odom_lock_.test_and_set()) //可以为每个临界区资源设置一个共享布尔变量 lock，表示资源的两种状态：ture 表示正在被占用，初值为 false。
+                                      //进程在进入临界区之前，利用 TestAndSet 检查标志 lock，
+                                      //若无进程在临界区，则其值为 false，可以进入，关闭临界资源，把 lock 置为 true，使任何进程都不能进入临界区；
+                                      //若有进程在临界区，则循环检查，直到进程退出。
       ;
     auto odom_msg = odom_msg_;
     odom_lock_.clear();
@@ -166,12 +171,15 @@ class Nodelet : public nodelet::Nodelet {
                               odom_msg.pose.pose.orientation.x,
                               odom_msg.pose.pose.orientation.y,
                               odom_msg.pose.pose.orientation.z);
-    if (!triger_received_) {
-      return;
-    }
+    
     if (!target_received_) {
       return;
     }
+
+    if (!triger_received_) {
+      return;
+    }
+
     // NOTE obtain state of target
     while (target_lock_.test_and_set())
       ;
@@ -188,12 +196,13 @@ class Nodelet : public nodelet::Nodelet {
     target_q.x() = replanStateMsg_.target.pose.pose.orientation.x;
     target_q.y() = replanStateMsg_.target.pose.pose.orientation.y;
     target_q.z() = replanStateMsg_.target.pose.pose.orientation.z;
-
+    
     // NOTE force-hover: waiting for the speed of drone small enough
+    // 强制悬停（不进行重规划操作）
     if (force_hover_ && odom_v.norm() > 0.1) {
       return;
     }
-
+    
     // NOTE just for landing on the car!
     if (land_triger_received_) {
       if (std::fabs((target_p - odom_p).norm() < 0.1 && odom_v.norm() < 0.1 && target_v.norm() < 0.2)) {
@@ -230,7 +239,7 @@ class Nodelet : public nodelet::Nodelet {
         wait_hover_ = false;
       }
     }
-
+    
     // NOTE obtain map
     while (gridmap_lock_.test_and_set())
       ;
@@ -240,48 +249,54 @@ class Nodelet : public nodelet::Nodelet {
     prePtr_->setMap(*gridmapPtr_);
 
     // visualize the ray from drone to target
+    // 可视化由无人机指向目标的射线
     if (envPtr_->checkRayValid(odom_p, target_p)) {
       visPtr_->visualize_arrow(odom_p, target_p, "ray", visualization::yellow);
     } else {
       visPtr_->visualize_arrow(odom_p, target_p, "ray", visualization::red);
     }
-
+    
     // NOTE prediction
-    std::vector<Eigen::Vector3d> target_predcit;
+    std::vector<Eigen::Vector3d> target_predcit; //预测点容器
     // ros::Time t_start = ros::Time::now();
-    bool generate_new_traj_success = prePtr_->predict(target_p, target_v, target_predcit);
+    bool generate_new_traj_success = prePtr_->predict(target_p, target_v, target_predcit); //利用目标的当前位置和速度预测目标的轨迹
     // ros::Time t_stop = ros::Time::now();
     // std::cout << "predict costs: " << (t_stop - t_start).toSec() * 1e3 << "ms" << std::endl;
     if (generate_new_traj_success) {
-      Eigen::Vector3d observable_p = target_predcit.back();
-      visPtr_->visualize_path(target_predcit, "car_predict");
+      Eigen::Vector3d observable_p = target_predcit.back(); //取出最后一个预测点
+      visPtr_->visualize_path(target_predcit, "car_predict"); //可视化目标预测轨迹
+      //计算可视区域：以预测点为圆心，以tracking_dist_为半径的圆（即实验中绿色的圆形区域）
       std::vector<Eigen::Vector3d> observable_margin;
       for (double theta = 0; theta <= 2 * M_PI; theta += 0.01) {
-        observable_margin.emplace_back(observable_p + tracking_dist_ * Eigen::Vector3d(cos(theta), sin(theta), 0));
+        observable_margin.emplace_back(observable_p + tracking_dist_ * Eigen::Vector3d(cos(theta), sin(theta), 0)); //在
       }
       visPtr_->visualize_path(observable_margin, "observable_margin");
     }
-
+    
     // NOTE replan state
+    // 计算下一次重规划的起始状态（位置、速度、加速度）
     Eigen::MatrixXd iniState;
     iniState.setZero(3, 3);
-    ros::Time replan_stamp = ros::Time::now() + ros::Duration(0.03);
-    double replan_t = (replan_stamp - replan_stamp_).toSec();
+    ros::Time replan_stamp = ros::Time::now() + ros::Duration(0.03); //下一次重规划时间点
+    double replan_t = (replan_stamp - replan_stamp_).toSec(); //下一次重规划与上一次重规划的时间间隔
     if (force_hover_ || replan_t > traj_poly_.getTotalDuration()) {
       // should replan from the hover state
+      // 如果是强迫悬停状态或者重规划的时间间隔已经超过了轨迹的总时间（即traj_poly_.getPos(replan_t)无意义），则从悬停位置开始规划
       iniState.col(0) = odom_p;
       iniState.col(1) = odom_v;
     } else {
       // should replan from the last trajectory
+      // 否则从上一次轨迹开始规划
       iniState.col(0) = traj_poly_.getPos(replan_t);
       iniState.col(1) = traj_poly_.getVel(replan_t);
       iniState.col(2) = traj_poly_.getAcc(replan_t);
     }
     replanStateMsg_.header.stamp = ros::Time::now();
-    replanStateMsg_.iniState.resize(9);
+    replanStateMsg_.iniState.resize(9); //3x3共9维数据
     Eigen::Map<Eigen::MatrixXd>(replanStateMsg_.iniState.data(), 3, 3) = iniState;
-
+    
     // NOTE path searching
+    // 路径规划
     Eigen::Vector3d p_start = iniState.col(0);
     std::vector<Eigen::Vector3d> path, way_pts;
 
@@ -300,7 +315,7 @@ class Nodelet : public nodelet::Nodelet {
       if (land_triger_received_) {
         generate_new_traj_success = envPtr_->short_astar(p_start, target_p, path);
       } else {
-        generate_new_traj_success = envPtr_->findVisiblePath(p_start, target_predcit, way_pts, path);
+        generate_new_traj_success = envPtr_->findVisiblePath(p_start, target_predcit, way_pts, path); //？
       }
       // ros::Time t_end0 = ros::Time::now();
       // t_path += (t_end0 - t_front0).toSec() * 1e3;
@@ -310,7 +325,7 @@ class Nodelet : public nodelet::Nodelet {
     std::vector<double> thetas;
     Trajectory traj;
     if (generate_new_traj_success) {
-      visPtr_->visualize_path(path, "astar");
+      visPtr_->visualize_path(path, "astar"); //可视化初始路径
       if (land_triger_received_) {
         for (const auto& p : target_predcit) {
           path.push_back(p);
@@ -339,7 +354,9 @@ class Nodelet : public nodelet::Nodelet {
         // ros::Time t_end2 = ros::Time::now();
         // t_path += (t_end2 - t_front2).toSec() * 1e3;
       }
+      
       // NOTE corridor generating
+      // 飞行走廊生成
       std::vector<Eigen::MatrixXd> hPolys;
       std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> keyPts;
 
@@ -350,8 +367,9 @@ class Nodelet : public nodelet::Nodelet {
 
       envPtr_->visCorridor(hPolys);
       visPtr_->visualize_pairline(keyPts, "keyPts");
-
+      
       // NOTE trajectory optimization
+      // 轨迹优化
       Eigen::MatrixXd finState;
       finState.setZero(3, 3);
       finState.col(0) = path.back();
@@ -380,7 +398,7 @@ class Nodelet : public nodelet::Nodelet {
 
       visPtr_->visualize_traj(traj, "traj");
     }
-
+    
     // NOTE collision check
     bool valid = false;
     if (generate_new_traj_success) {
@@ -388,6 +406,7 @@ class Nodelet : public nodelet::Nodelet {
     } else {
       replanStateMsg_.state = -2;
       replanState_pub_.publish(replanStateMsg_);
+      ROS_WARN("[planner] REPLAN FAILED");
     }
     if (valid) {
       force_hover_ = false;
@@ -426,6 +445,7 @@ class Nodelet : public nodelet::Nodelet {
       return;  // current generated traj invalid but last is valid
     }
     visPtr_->visualize_traj(traj, "traj");
+    
   }
 
   void fake_timer_callback(const ros::TimerEvent& event) {
@@ -612,7 +632,7 @@ class Nodelet : public nodelet::Nodelet {
   }
 
   void debug_timer_callback(const ros::TimerEvent& event) {
-    inflate_gridmap_pub_.publish(replanStateMsg_.occmap);
+    inflate_gridmap_pub_.publish(replanStateMsg_.occmap); //replanStateMsg_.occmap为订阅的gridmap_inflate消息
     Eigen::MatrixXd iniState;
     iniState.setZero(3, 3);
     ros::Time replan_stamp = ros::Time::now() + ros::Duration(0.03);
@@ -749,7 +769,7 @@ class Nodelet : public nodelet::Nodelet {
     nh.getParam("tracking_dist", tracking_dist_);
     nh.getParam("tolerance_d", tolerance_d_);
     nh.getParam("debug", debug_);
-    nh.getParam("fake", fake_);
+    nh.getParam("fake", fake_); //fake_为true表示目标，fake_为false表示无人机
 
     gridmapPtr_ = std::make_shared<mapping::OccGridMap>();
     envPtr_ = std::make_shared<env::Env>(nh, gridmapPtr_);
@@ -769,16 +789,17 @@ class Nodelet : public nodelet::Nodelet {
       gridmapPtr_->from_msg(replanStateMsg_.occmap);
       prePtr_->setMap(*gridmapPtr_);
       std::cout << "plan state: " << replanStateMsg_.state << std::endl;
-    } else if (fake_) {
+    } else if (fake_) { //该计时器是为代替目标的“假”无人机准备的
       plan_timer_ = nh.createTimer(ros::Duration(1.0 / plan_hz), &Nodelet::fake_timer_callback, this);
     } else {
       plan_timer_ = nh.createTimer(ros::Duration(1.0 / plan_hz), &Nodelet::plan_timer_callback, this);
     }
-    gridmap_sub_ = nh.subscribe<quadrotor_msgs::OccMap3d>("gridmap_inflate", 1, &Nodelet::gridmap_callback, this, ros::TransportHints().tcpNoDelay());
-    odom_sub_ = nh.subscribe<nav_msgs::Odometry>("odom", 10, &Nodelet::odom_callback, this, ros::TransportHints().tcpNoDelay());
-    target_sub_ = nh.subscribe<nav_msgs::Odometry>("target", 10, &Nodelet::target_callback, this, ros::TransportHints().tcpNoDelay());
-    triger_sub_ = nh.subscribe<geometry_msgs::PoseStamped>("triger", 10, &Nodelet::triger_callback, this, ros::TransportHints().tcpNoDelay());
-    land_triger_sub_ = nh.subscribe<geometry_msgs::PoseStamped>("land_triger", 10, &Nodelet::land_triger_callback, this, ros::TransportHints().tcpNoDelay());
+    gridmap_sub_ = nh.subscribe<quadrotor_msgs::OccMap3d>("gridmap_inflate", 1, &Nodelet::gridmap_callback, this, ros::TransportHints().tcpNoDelay()); //订阅地图消息
+    odom_sub_ = nh.subscribe<nav_msgs::Odometry>("odom", 10, &Nodelet::odom_callback, this, ros::TransportHints().tcpNoDelay());  //订阅无人机里程计消息
+    target_sub_ = nh.subscribe<nav_msgs::Odometry>("target", 10, &Nodelet::target_callback, this, ros::TransportHints().tcpNoDelay()); ///订阅目标里程计消息
+    triger_sub_ = nh.subscribe<geometry_msgs::PoseStamped>("triger", 10, &Nodelet::triger_callback, this, ros::TransportHints().tcpNoDelay()); //当收到triger话题时触发跟踪
+    land_triger_sub_ = nh.subscribe<geometry_msgs::PoseStamped>("land_triger", 10, &Nodelet::land_triger_callback, this, ros::TransportHints().tcpNoDelay()); //land_triger应该跟降落有关，暂时不管
+    
     ROS_WARN("Planning node initialized!");
   }
 

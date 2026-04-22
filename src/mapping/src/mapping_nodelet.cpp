@@ -298,7 +298,7 @@ class Nodelet : public nodelet::Nodelet {
     } else {
       depth_sub_.subscribe(nh, "depth", 1);
       odom_sub_.subscribe(nh, "odom", 50);
-      depth_odom_sync_Ptr_ = std::make_shared<ImageOdomSynchronizer>(ImageOdomSyncPolicy(100), depth_sub_, odom_sub_);
+      depth_odom_sync_Ptr_ = std::make_shared<ImageOdomSynchronizer>(ImageOdomSyncPolicy(100), depth_sub_, odom_sub_); //创建一个用于同步处理深度信息和里程计信息的对象，并设置回调函数来处理同步后的数据。
       depth_odom_sync_Ptr_->registerCallback(boost::bind(&Nodelet::depth_odom_callback, this, _1, _2));
     }
 

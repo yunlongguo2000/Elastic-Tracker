@@ -80,7 +80,7 @@ Eigen::Vector3d last_pose_world;
 void render_currentpose();
 void render_pcl_world();
 
-void rcvOdometryCallbck(const nav_msgs::Odometry &odom) {
+void rcvOdometryCallbck(const nav_msgs::Odometry &odom) { //订阅无人机里程计信息
   /*if(!has_global_map)
     return;*/
   has_odom = true;
@@ -113,7 +113,7 @@ void rcvOdometryCallbck(const nav_msgs::Odometry &odom) {
   last_pose_world(2) = odom.pose.pose.position.z;
 }
 
-void pubCameraPose(const ros::TimerEvent &event) {
+void pubCameraPose(const ros::TimerEvent &event) { //发布相机位姿
   //cout<<"pub cam pose"
   geometry_msgs::PoseStamped camera_pose;
   camera_pose.header = _odom.header;

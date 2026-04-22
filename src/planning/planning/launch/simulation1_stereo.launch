@@ -9,8 +9,7 @@
   <group ns="typhoon_h480_0">
     <include file="$(find mapping)/launch/mapping.launch">
       <arg name="odom_" value="mavros/local_position/odom"/>
-      <!-- <arg name="depth_" value="depth/image_raw"/>    -->
-      <arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>
+      <!--<arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>-->
     </include>
 
     <node name="mapping_vis" pkg="mapping" type="mapping_vis_node">
@@ -40,7 +39,7 @@
   <group ns="typhoon_h480_1">
     <include file="$(find mapping)/launch/mapping.launch">
       <arg name="odom_" value="mavros/local_position/odom"/>
-      <arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>
+      <!--<arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>-->
     </include>
 
     <node name="mapping_vis" pkg="mapping" type="mapping_vis_node">
@@ -70,7 +69,7 @@
   <group ns="typhoon_h480_2">
     <include file="$(find mapping)/launch/mapping.launch">
       <arg name="odom_" value="mavros/local_position/odom"/>
-      <arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>
+      <!--<arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>-->
     </include>
 
     <node name="mapping_vis" pkg="mapping" type="mapping_vis_node">
@@ -100,7 +99,7 @@
   <group ns="typhoon_h480_3">
     <include file="$(find mapping)/launch/mapping.launch">
       <arg name="odom_" value="mavros/local_position/odom"/>
-      <arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>
+      <!--<arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>-->
     </include>
 
     <node name="mapping_vis" pkg="mapping" type="mapping_vis_node">
@@ -130,7 +129,7 @@
   <group ns="typhoon_h480_4">
     <include file="$(find mapping)/launch/mapping.launch">
       <arg name="odom_" value="mavros/local_position/odom"/>
-      <arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>
+      <!--<arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>-->
     </include>
 
     <node name="mapping_vis" pkg="mapping" type="mapping_vis_node">
@@ -160,7 +159,7 @@
   <group ns="typhoon_h480_5">
     <include file="$(find mapping)/launch/mapping.launch">
       <arg name="odom_" value="mavros/local_position/odom"/>
-      <arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>
+      <!--<arg name="depth_" value="realsense/depth_camera/depth/image_raw"/>-->
     </include>
 
     <node name="mapping_vis" pkg="mapping" type="mapping_vis_node">
